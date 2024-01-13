@@ -20,15 +20,34 @@ typedef std::vector<Vector2> Points;
 
 class Box {
   public:
+    Vector2 pin;
+
     float top;
     float bottom;
     float left;
     float right;
-    bool init;
-    Box() { this->init = false; }
-    Box(Points *points) {
-        this->init = true;
 
+    void setpin(Vector2 point) {
+        this->pin.x = this->left = point.x;
+        this->pin.y = this->top = point.y;
+    }
+
+    bool overlap(Box *other) {
+        return ((this->left >= other->left && this->left <= other->right) ||
+                (other->left >= this->left && other->left <= this->right)) &&
+               ((this->top >= other->top && this->top <= other->bottom) ||
+                (other->top >= this->top && other->top <= this->bottom));
+    }
+
+    Box() {
+        this->top = 0.f;
+        this->left = 0.f;
+        this->bottom = 0.f;
+        this->right = 0.f;
+        this->pin = Vector2{0.f, 0.f};
+    }
+
+    Box(Points *points) {
         int size = points->size();
         if (size == 0)
             return;
@@ -55,38 +74,18 @@ class Box {
 
 class Track {
   public:
+    bool ok;
     Points points;
     Box box;
-    void calcBox() {
-
-        Box bb = Box{&this->points};
-
-        this->box = bb;
+    void finalize() {
+        this->ok = true;
+        this->box = Box{&this->points};
     }
     void push(Vector2 point) { this->points.push_back(point); }
-    Track() {}
+    Track() { this->ok = false; }
 };
 
 typedef std::vector<Track> Tracks;
-
-class Area {
-  public:
-    Vector2 pos;
-    float right;
-    float bottom;
-    Area() {
-        this->pos = {0.f, 0.f};
-        this->right = 0.f;
-        this->bottom = 0.f;
-    }
-};
-
-bool overlap(Area *A, Box *B) {
-    return ((A->pos.x >= B->left && A->pos.x <= B->right) ||
-            (B->left >= A->pos.x && B->left <= A->right)) &&
-           ((A->pos.y >= B->top && A->pos.y <= B->bottom) ||
-            (B->top >= A->pos.y && B->top <= A->bottom));
-}
 
 int main(int argc, char *argv[]) {
     bool DARK = true;
@@ -99,7 +98,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    Area area;
+    Box area;
     Tracks tracks;
     tracks.push_back(Track());
 
@@ -116,7 +115,10 @@ int main(int argc, char *argv[]) {
 
     Color const BG = DARK ? Color{42, 42, 42} : Color{232, 232, 232};
     Color const FG = DARK ? Color{219, 219, 219, 128} : Color{51, 51, 51, 128};
-    Color const REC = DARK ? Color{255, 255, 255, 16} : Color{0, 0, 0, 16};
+
+#if defined(DEBUG)
+    Color const REC = DARK ? Color{219, 219, 219, 16} : Color{51, 51, 51, 16};
+#endif
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     SetConfigFlags(FLAG_MSAA_4X_HINT);
@@ -143,7 +145,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-            leave_area = area.pos;
+            leave_area = area.pin;
             leave_drag = GetMousePosition();
             grabbing = true;
         } else if (grabbing) {
@@ -151,7 +153,7 @@ int main(int argc, char *argv[]) {
                 grabbing = false;
             } else {
                 Vector2 _i = sub(&leave_drag, &mouse_curr);
-                area.pos = add(&leave_area, &_i);
+                area.setpin(add(&leave_area, &_i));
             }
         }
 
@@ -159,19 +161,19 @@ int main(int argc, char *argv[]) {
             ctime = 0;
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                 if (!eq(&mouse_last, &mouse_curr)) {
-                    tracks[tracks.size() - 1].push(add(&mouse_curr, &area.pos));
+                    tracks[tracks.size() - 1].push(add(&mouse_curr, &area.pin));
                     mouse_last = mouse_curr;
                 }
             }
         }
 
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-            tracks[tracks.size() - 1].calcBox();
+            tracks[tracks.size() - 1].finalize();
             tracks.push_back(Track());
         }
 
-        area.right = area.pos.x + (float)GetRenderWidth();
-        area.bottom = area.pos.y + (float)GetRenderHeight();
+        area.right = area.left + (float)GetRenderWidth();
+        area.bottom = area.top + (float)GetRenderHeight();
 
         BeginDrawing();
 
@@ -181,20 +183,21 @@ int main(int argc, char *argv[]) {
         int npoints = 0;
 
         for (int i = 0; i < tracks.size(); i++) {
+            Track *track = &tracks[i];
             Box *box = &tracks[i].box;
             Points *points = &tracks[i].points;
             int len = points->size();
 
-            if ((!box->init || overlap(&area, box)) && len > 3) {
+            if ((!track->ok || box->overlap(&area)) && len > 3) {
 #if defined(DEBUG)
-                if (box->init)
+                if (track->ok)
                     DrawRectangleLines(
-                        box->left - area.pos.x, box->top - area.pos.y,
+                        box->left - area.left, box->top - area.top,
                         box->right - box->left, box->bottom - box->top, REC);
 #endif
                 Vector2 tpoints[len];
                 for (int p = 0; p < len; p++)
-                    tpoints[p] = sub(&(*points)[p], &area.pos);
+                    tpoints[p] = sub(&(*points)[p], &area.pin);
 
                 DrawSplineBasis(tpoints, len, 1.25f, FG);
 
@@ -205,9 +208,9 @@ int main(int argc, char *argv[]) {
 
 #if defined(DEBUG)
         std::string debug_info = "fps " + std::to_string(GetFPS()) + "\nx " +
-                                 std::to_string(area.pos.x) + " " +
+                                 std::to_string(area.left) + " " +
                                  std::to_string(area.right) + "\ny " +
-                                 std::to_string(area.pos.y) + " \n" +
+                                 std::to_string(area.top) + " \n" +
                                  std::to_string(area.bottom) + "\nrendering " +
                                  std::to_string(ntracks) + " tracks\n" +
                                  std::to_string(npoints) + " points";
