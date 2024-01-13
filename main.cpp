@@ -1,8 +1,10 @@
-#define DEBUG true;
+#define DEBUG true
 
 #include "raylib.h"
 #include <string>
 #include <vector>
+
+const float INPUT_RATE = 1.f / 30.f;
 
 bool eq(Vector2 *a, Vector2 *b) { return a->x == b->x && a->y == b->y; }
 
@@ -24,12 +26,30 @@ class Box {
     float right;
     bool init;
     Box() { this->init = false; }
-    Box(float x, float y) {
-        this->top = y;
-        this->bottom = y;
-        this->left = x;
-        this->right = x;
+    Box(Points *points) {
         this->init = true;
+
+        int size = points->size();
+        if (size == 0)
+            return;
+
+        Vector2 initial = (*points)[0];
+        this->top = initial.y;
+        this->bottom = initial.y;
+        this->left = initial.x;
+        this->right = initial.x;
+
+        for (int i = 1; i < size; i++) {
+            Vector2 *p = &(*points)[i];
+            if (p->x < this->left)
+                this->left = p->x;
+            if (p->x > this->right)
+                this->right = p->x;
+            if (p->y < this->top)
+                top = p->y;
+            if (p->y > this->bottom)
+                this->bottom = p->y;
+        }
     }
 };
 
@@ -38,28 +58,8 @@ class Track {
     Points points;
     Box box;
     void calcBox() {
-        int size = this->points.size();
 
-        if (size == 0)
-            return;
-
-        Box bb = Box{
-            this->points[0].y,
-            this->points[0].x,
-        };
-
-        for (int i = 0; i < size; i++) {
-            Vector2 p = this->points[i];
-
-            if (p.x < bb.left)
-                bb.left = p.x;
-            if (p.x > bb.right)
-                bb.right = p.x;
-            if (p.y < bb.top)
-                bb.top = p.y;
-            if (p.y > bb.bottom)
-                bb.bottom = p.y;
-        }
+        Box bb = Box{&this->points};
 
         this->box = bb;
     }
@@ -91,8 +91,7 @@ bool overlap(Area *A, Box *B) {
 int main(int argc, char *argv[]) {
     bool DARK = true;
 
-    int len = sizeof(*argv);
-    for (int i = 0; i < len; i++) {
+    for (int i = 0; i < argc; i++) {
         if (argv[i]) {
             std::string arg = std::string(argv[i]);
             if (arg == "--light" || arg == "-l")
@@ -106,6 +105,9 @@ int main(int argc, char *argv[]) {
 
     bool grabbing = false;
 
+    float ftime = 0.f;
+    float ctime = 0.f;
+
     Vector2 leave_area;
     Vector2 leave_drag;
 
@@ -114,6 +116,7 @@ int main(int argc, char *argv[]) {
 
     Color const BG = DARK ? Color{42, 42, 42} : Color{232, 232, 232};
     Color const FG = DARK ? Color{219, 219, 219, 128} : Color{51, 51, 51, 128};
+    Color const REC = DARK ? Color{255, 255, 255, 16} : Color{0, 0, 0, 16};
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     SetConfigFlags(FLAG_MSAA_4X_HINT);
@@ -123,6 +126,7 @@ int main(int argc, char *argv[]) {
 
     while (!WindowShouldClose()) {
         mouse_curr = GetMousePosition();
+        ftime = GetFrameTime();
 
         if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) {
             if (IsKeyPressed(KEY_C)) {
@@ -151,10 +155,13 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            if (!eq(&mouse_last, &mouse_curr)) {
-                tracks[tracks.size() - 1].push(add(&mouse_curr, &area.pos));
-                mouse_last = mouse_curr;
+        if (ftime > INPUT_RATE || (ctime += ftime) > INPUT_RATE) {
+            ctime = 0;
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                if (!eq(&mouse_last, &mouse_curr)) {
+                    tracks[tracks.size() - 1].push(add(&mouse_curr, &area.pos));
+                    mouse_last = mouse_curr;
+                }
             }
         }
 
@@ -170,20 +177,29 @@ int main(int argc, char *argv[]) {
 
         ClearBackground(BG);
 
-        int rendered = 0;
+        int ntracks = 0;
+        int npoints = 0;
 
         for (int i = 0; i < tracks.size(); i++) {
             Box *box = &tracks[i].box;
             Points *points = &tracks[i].points;
             int len = points->size();
 
-            if ((!box->init || overlap(&area, box)) && len > 1) {
-                Points cc;
-                cc.reserve(len / 4);
-                for (int p = 0; p < len; p += 4)
-                    cc.push_back(sub(&(*points)[p], &area.pos));
-                DrawSplineBezierCubic(cc.data(), cc.size(), 1.25, FG);
-                rendered++;
+            if ((!box->init || overlap(&area, box)) && len > 3) {
+#if defined(DEBUG)
+                if (box->init)
+                    DrawRectangleLines(
+                        box->left - area.pos.x, box->top - area.pos.y,
+                        box->right - box->left, box->bottom - box->top, REC);
+#endif
+                Vector2 tpoints[len];
+                for (int p = 0; p < len; p++)
+                    tpoints[p] = sub(&(*points)[p], &area.pos);
+
+                DrawSplineBasis(tpoints, len, 1.25f, FG);
+
+                ntracks++;
+                npoints += len;
             }
         }
 
@@ -191,9 +207,10 @@ int main(int argc, char *argv[]) {
         std::string debug_info = "fps " + std::to_string(GetFPS()) + "\nx " +
                                  std::to_string(area.pos.x) + " " +
                                  std::to_string(area.right) + "\ny " +
-                                 std::to_string(area.pos.y) + " " +
+                                 std::to_string(area.pos.y) + " \n" +
                                  std::to_string(area.bottom) + "\nrendering " +
-                                 std::to_string(rendered) + " tracks";
+                                 std::to_string(ntracks) + " tracks\n" +
+                                 std::to_string(npoints) + " points";
 
         DrawText(debug_info.c_str(), 4, 4, 10, FG);
 #endif
