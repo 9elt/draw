@@ -167,9 +167,10 @@ int main(int argc, char *argv[]) {
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                 Track *track = &tracks[tracks.size() - 1];
                 int len = track->points.size();
+                Vector2 curr = add(&mouse_curr, &area.pin);
                 if (len < 5 ||
-                    dist(&track->points[len - 1], &mouse_curr) > MIN_DIST) {
-                    track->push(add(&mouse_curr, &area.pin));
+                    dist(&track->points[len - 1], &curr) > MIN_DIST) {
+                    track->push(curr);
                     mouse_last = mouse_curr;
                 }
             }
