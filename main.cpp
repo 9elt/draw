@@ -1,9 +1,11 @@
 #define DEBUG true
 
 #include "raylib.h"
+#include <math.h>
 #include <string>
 #include <vector>
 
+const float MIN_DIST = 3.f;
 const float INPUT_RATE = 1.f / 30.f;
 
 bool eq(Vector2 *a, Vector2 *b) { return a->x == b->x && a->y == b->y; }
@@ -14,6 +16,10 @@ Vector2 sub(Vector2 *a, Vector2 *b) {
 
 Vector2 add(Vector2 *a, Vector2 *b) {
     return Vector2{a->x + b->x, a->y + b->y};
+}
+
+float dist(Vector2 *a, Vector2 *b) {
+    return sqrt(pow(a->x - b->x, 2)) + sqrt(pow(a->y - b->y, 2));
 }
 
 typedef std::vector<Vector2> Points;
@@ -90,13 +96,12 @@ typedef std::vector<Track> Tracks;
 int main(int argc, char *argv[]) {
     bool DARK = true;
 
-    for (int i = 0; i < argc; i++) {
+    for (int i = 0; i < argc; i++)
         if (argv[i]) {
             std::string arg = std::string(argv[i]);
             if (arg == "--light" || arg == "-l")
                 DARK = false;
         }
-    }
 
     Box area;
     Tracks tracks;
@@ -146,7 +151,7 @@ int main(int argc, char *argv[]) {
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
             leave_area = area.pin;
-            leave_drag = GetMousePosition();
+            leave_drag = mouse_curr;
             grabbing = true;
         } else if (grabbing) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_RIGHT)) {
@@ -160,8 +165,11 @@ int main(int argc, char *argv[]) {
         if (ftime > INPUT_RATE || (ctime += ftime) > INPUT_RATE) {
             ctime = 0;
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-                if (!eq(&mouse_last, &mouse_curr)) {
-                    tracks[tracks.size() - 1].push(add(&mouse_curr, &area.pin));
+                Track *track = &tracks[tracks.size() - 1];
+                int len = track->points.size();
+                if (len < 5 ||
+                    dist(&track->points[len - 1], &mouse_curr) > MIN_DIST) {
+                    track->push(add(&mouse_curr, &area.pin));
                     mouse_last = mouse_curr;
                 }
             }
