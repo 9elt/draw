@@ -1,11 +1,7 @@
 #define DEBUG true
-
-#include "Draw.hpp"
+#include "Canvas.hpp"
+#include "Config.hpp"
 #include <string>
-
-typedef unsigned int u32;
-typedef signed int s32;
-typedef float f32;
 
 Config config;
 
@@ -80,15 +76,17 @@ int main(int argc, char *argv[]) {
 
         ClearBackground(config.background);
 
+#if defined(DEBUG)
         u32 debug_track_size = 0;
         u32 debug_points_count = 0;
+#endif
 
         for (u32 i = 0; i < canvas.size(); i++) {
             Track *track = canvas.get(i);
 
             if (!track->is_empty()) {
                 Box *box = track->bounding_box();
-                int len = track->size();
+                u32 size = track->size();
 
                 if (!track->is_finalized() || box->overlap(&area)) {
 #if defined(DEBUG)
@@ -96,16 +94,13 @@ int main(int argc, char *argv[]) {
                         DrawRectangleLines(box->x - area.x, box->y - area.y,
                                            box->width, box->height,
                                            config.outlines);
-#endif
-                    Vector2 tpoints[len];
-                    Point pin = area.pin();
-                    for (int p = 0; p < len; p++)
-                        tpoints[p] = track->get(p)->sub(&pin).raw();
-
-                    DrawSplineBasis(tpoints, len, 1.25f, config.foreground);
-
                     debug_track_size++;
-                    debug_points_count += len;
+                    debug_points_count += size;
+#endif
+                    Vector2 tpoints[size];
+                    track->cast(area.pin(), tpoints);
+
+                    DrawSplineBasis(tpoints, size, 1.25f, config.foreground);
                 }
             }
         }

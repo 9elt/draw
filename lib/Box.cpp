@@ -1,4 +1,4 @@
-#include "Draw.hpp"
+#include "Box.hpp"
 
 bool Box::overlap(Box *other) {
     return ((x >= other->x && x <= other->x + other->width) ||

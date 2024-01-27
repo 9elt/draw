@@ -1,4 +1,4 @@
-#include "Draw.hpp"
+#include "Config.hpp"
 #include <string>
 
 Config::Config() {

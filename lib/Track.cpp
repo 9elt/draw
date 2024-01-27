@@ -1,4 +1,4 @@
-#include "Draw.hpp"
+#include "Track.hpp"
 #define TRACK_CAPACITY 64
 #define MIN_TRACK_LENGTH 4
 #define MIN_POINT_DISTANCE 4.f
@@ -71,6 +71,11 @@ bool Track::is_finalized() { return finalized; }
 bool Track::is_empty() { return length < MIN_TRACK_LENGTH; }
 
 Point *Track::get(u32 i) { return &points[i]; }
+
+void Track::cast(Point pin, Vector2 arr[]) {
+    for (u32 p = 0; p < length; p++)
+        arr[p] = get(p)->sub(&pin).raw();
+}
 
 Point *Track::last() { return &points[length - 1]; }
 

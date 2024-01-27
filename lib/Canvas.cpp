@@ -1,4 +1,4 @@
-#include "Draw.hpp"
+#include "Canvas.hpp"
 #define CANVAS_CAPACITY 8
 
 void Canvas::resize(u32 size) {
