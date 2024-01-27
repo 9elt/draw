@@ -1,2 +1,5 @@
+-Wall
+-Wextra
 -I.
-
+-I./lib
+-g
